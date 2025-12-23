@@ -38,7 +38,7 @@ fn binding<'a>() -> parser!('a: Binding<'a>) {
 fn expression<'a>() -> parser!('a: Expr<'a>) {
     recursive(|expression| {
         let lambda = binding()
-            .separated_by(op('|'))
+            .repeated()
             .collect::<Vec<_>>()
             .delimited_by(op('|'), op('|'))
             .then(expression.clone())
