@@ -1,9 +1,11 @@
 mod args;
 mod ast;
+mod eval;
 mod parser;
+mod scope;
 use crate::args::get_args;
 use crate::ast::Node;
-use crate::ast::eval::Evaluator;
+use crate::eval::Evaluator;
 use crate::parser::parser;
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::Parser;

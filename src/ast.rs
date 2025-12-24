@@ -25,14 +25,9 @@ pub enum Expr<'a> {
     Call(Box<Self>, Box<Self>),
     Referal(Ident<'a>),
 }
-pub mod scope;
-
-pub mod eval;
 
 pub trait Node {
     type Next;
     type State;
     fn map(self, state: &mut Self::State) -> Self::Next;
 }
-
-

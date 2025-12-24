@@ -19,9 +19,9 @@ impl Evaluator<'_> {
     }
 }
 
-use crate::ast::scope::Scope;
+use crate::scope::Scope;
 
-use super::{Expr, Ident, LambdaFunction, Node};
+use crate::ast::{Expr, Ident, LambdaFunction, Node};
 
 impl<'a> Node for Expr<'a> {
     type Next = Value<'a>;
