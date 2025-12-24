@@ -1,12 +1,5 @@
-use std::fmt::Debug;
-#[derive(Clone, PartialEq, Eq, Copy, Hash)]
-pub struct Ident<'a>(pub &'a str);
+use crate::common::Ident;
 
-impl Debug for Ident<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub struct Binding<'a>(pub Ident<'a>);
 
@@ -24,10 +17,4 @@ pub enum Expr<'a> {
     Multiplication(Box<Self>, Box<Self>),
     Call(Box<Self>, Box<Self>),
     Referal(Ident<'a>),
-}
-
-pub trait Node {
-    type Next;
-    type State;
-    fn map(self, state: &mut Self::State) -> Self::Next;
 }

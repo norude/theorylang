@@ -1,44 +1,34 @@
+use crate::common::Ident;
+use crate::lowering::level1;
+use crate::scope::Scope;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value<'a> {
     Number(i32),
     Function {
-        definition: LambdaFunction<'a>,
-        // captured:Scope<Ident<'a>,Value<'a>>, // FIXME:
+        definition: level1::LambdaFunction<'a>,
     },
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Evaluator<'a> {
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct State<'a> {
     scope: Scope<Ident<'a>, Value<'a>>,
 }
 
-impl Evaluator<'_> {
-    pub fn new() -> Self {
-        Self {
-            scope: Scope::default(),
-        }
-    }
-}
-
-use crate::scope::Scope;
-
-use crate::ast::{Expr, Ident, LambdaFunction, Node};
-
-impl<'a> Node for Expr<'a> {
-    type Next = Value<'a>;
-    type State = Evaluator<'a>;
-    fn map(self, state: &mut Evaluator<'a>) -> Value<'a> {
+impl<'a> level1::Expr<'a> {
+    pub fn map(self, state: &mut State<'a>) -> Value<'a> {
         match self {
-            Expr::Number(x) => Value::Number(x),
-            Expr::LambdaFunction(x) => Value::Function { definition: x },
-            Expr::Addition(x, y) => {
-                let x = x.map(state);
+            level1::Expr::Number(x) => Value::Number(x),
+            level1::Expr::LambdaFunction(x) => Value::Function { definition: x },
+            level1::Expr::Addition(x, y) => {
+                let x = x.map(&mut *state);
                 let y = y.map(state);
                 match (x, y) {
                     (Value::Number(x), Value::Number(y)) => Value::Number(x + y),
                     _ => panic!(),
                 }
             }
-            Expr::Multiplication(x, y) => {
+            level1::Expr::Multiplication(x, y) => {
                 let x = x.map(state);
                 let y = y.map(state);
                 match (x, y) {
@@ -46,13 +36,13 @@ impl<'a> Node for Expr<'a> {
                     _ => panic!(),
                 }
             }
-            Expr::Referal(x) => dbg!(&state.scope).get(dbg!(&x)).unwrap().clone(),
-            Expr::Call(x, y) => {
+            level1::Expr::Referal(x) => state.scope.get(&x).unwrap().clone(),
+            level1::Expr::Call(x, y) => {
                 let x = x.map(state);
                 let y = y.map(state);
                 match x {
                     Value::Function {
-                        definition: LambdaFunction { arg, body },
+                        definition: level1::LambdaFunction { arg, body },
                     } => {
                         state.scope.new_scope();
                         dbg!(&state.scope);

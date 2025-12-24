@@ -1,11 +1,18 @@
 mod args;
-mod ast;
-mod eval;
+mod lowering;
 mod parser;
 mod scope;
+mod common {
+    #[derive(Clone, PartialEq, Eq, Copy, Hash)]
+    pub struct Ident<'a>(pub &'a str); // TODO: move this to a better place
+    impl std::fmt::Debug for Ident<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{:?}", self.0)
+        }
+    }
+}
 use crate::args::get_args;
-use crate::ast::Node;
-use crate::eval::Evaluator;
+use crate::lowering::Lower;
 use crate::parser::parser;
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::Parser;
@@ -41,7 +48,6 @@ fn main() {
         Ok(tree) => tree,
     };
     println!("{tree:?}");
-    let mut evalueator = Evaluator::new();
-    let value = tree.map(&mut evalueator);
+    let value = tree.lower_all_the_way();
     println!("{value:?}");
 }
