@@ -83,7 +83,9 @@ impl State {
                             },
                             passed,
                         ) => {
-                            let old_bindings = self.bindings.clone();
+                            // Functions are pure. Refering to stuff from the outer scope should be
+                            // done with capturing! For that reason, we empty out self.bindings
+                            let old_bindings = std::mem::take(&mut self.bindings);
                             self.bindings.insert(arg.scope, passed);
                             self.bindings
                                 .extend(captures.into_iter().map(|(k, v)| (k.scope, v)));

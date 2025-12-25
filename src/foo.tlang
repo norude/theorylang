@@ -1,17 +1,9 @@
-(|vec|
-(|push|
-(|fold|
-(|map|  
-    (|array|
+let vec = |last op| last in
+let push = |array new| |last op| op(array last op)(new) in 
+let fold = |x| x in
+let map = |array op| fold array vec (|left right| push left (op right)) in
+let array = (push (push vec 3) 4) in
 
-
-     fold (map array |x|x+1) 1 |x y| x*y
-
-
-    ) (push (push vec 3) 4)
-) |array op| fold array vec (|left right| push left (op right))
-) |x| x
-) |array new| |last op| op(array last op)(new)
-) |last op| last
+fold (map array |x|x+1) 1 |x y| x*y
 
 

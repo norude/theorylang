@@ -143,7 +143,27 @@ impl<'a> State<'a> {
                     captured,
                 }
             }
+            level0::Expr::LetBinding { name, value, body } => {
+                // let name = value in scope -> (|name|body)(value)
+                let value = self.map_expr(*value);
+                self.captures.push((self.bindings.len(), HashSet::new()));
+                let key = self.introduce_binding(name);
 
+                let body = self.map_expr(*body);
+
+                let name = self.bindings.pop(&key).unwrap();
+                let (_, captured) = self.captures.pop().unwrap();
+
+                Expr::BinaryOperation(
+                    Box::new(Expr::LambdaFunction {
+                        arg: name,
+                        body: Box::new(body),
+                        captured,
+                    }),
+                    BinaryOpKind::Call,
+                    Box::new(value),
+                )
+            }
             level0::Expr::BinaryOperation(lhs, kind, rhs) => {
                 macro_rules! simple {
                     ($op:ident) => {

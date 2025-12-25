@@ -24,7 +24,15 @@ impl std::fmt::Display for BinaryOpKind {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr<'a> {
     Number(i32),
-    LambdaFunction { arg: Binding<'a>, body: Box<Self> },
+    LambdaFunction {
+        arg: Binding<'a>,
+        body: Box<Self>,
+    },
+    LetBinding {
+        name: Binding<'a>,
+        value: Box<Self>,
+        body: Box<Self>,
+    },
     BinaryOperation(Box<Self>, BinaryOpKind, Box<Self>),
     Referal(Ident<'a>),
 }
@@ -40,6 +48,7 @@ impl std::fmt::Display for Expr<'_> {
         match self {
             Expr::Number(n) => write!(f, "{n}"),
             Expr::LambdaFunction { arg, body } => write!(f, "|{arg}| ({body})"),
+            Expr::LetBinding { name, value, body: scope } => write!(f, "let {name} = {value} in {scope}"),
             Expr::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
             Expr::Referal(name) => write!(f, "{name}"),
         }
