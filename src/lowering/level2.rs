@@ -1,55 +1,73 @@
-use crate::common::Ident;
+use std::collections::HashMap;
+
+use crate::common::Scope;
 use crate::lowering::level1;
-use crate::scope::Scope;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value<'a> {
     Number(i32),
     Function {
-        definition: level1::LambdaFunction<'a>,
+        arg: level1::Binding<'a>,
+        body: level1::Expr<'a>,
+        captures: HashMap<Scope, Self>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct State<'a> {
-    scope: Scope<Ident<'a>, Value<'a>>,
+    bindings: HashMap<Scope, Value<'a>>,
 }
 
-impl<'a> level1::Expr<'a> {
-    pub fn map(self, state: &mut State<'a>) -> Value<'a> {
-        match self {
+impl<'a> State<'a> {
+    pub fn map_expr(&mut self, expr: level1::Expr<'a>) -> Value<'a> {
+        match expr {
             level1::Expr::Number(x) => Value::Number(x),
-            level1::Expr::LambdaFunction(x) => Value::Function { definition: x },
+            level1::Expr::LambdaFunction {
+                arg,
+                body,
+                captured,
+            } => Value::Function {
+                arg,
+                body: *body,
+                captures: captured
+                    .into_iter()
+                    .map(|s| (s, self.bindings.get(&s).unwrap().clone()))
+                    .collect(),
+            },
             level1::Expr::Addition(x, y) => {
-                let x = x.map(&mut *state);
-                let y = y.map(state);
+                let x = self.map_expr(*x);
+                let y = self.map_expr(*y);
                 match (x, y) {
                     (Value::Number(x), Value::Number(y)) => Value::Number(x + y),
                     _ => panic!(),
                 }
             }
             level1::Expr::Multiplication(x, y) => {
-                let x = x.map(state);
-                let y = y.map(state);
+                let x = self.map_expr(*x);
+                let y = self.map_expr(*y);
                 match (x, y) {
                     (Value::Number(x), Value::Number(y)) => Value::Number(x * y),
                     _ => panic!(),
                 }
             }
-            level1::Expr::Referal(x) => state.scope.get(&x).unwrap().clone(),
+            level1::Expr::Referal { scope, name: _ } => self.bindings.get(&scope).unwrap().clone(),
             level1::Expr::Call(x, y) => {
-                let x = x.map(state);
-                let y = y.map(state);
+                let x = self.map_expr(*x);
+                let passed = self.map_expr(*y);
                 match x {
                     Value::Function {
-                        definition: level1::LambdaFunction { arg, body },
+                        arg,
+                        body,
+                        captures,
                     } => {
-                        state.scope.new_scope();
-                        dbg!(&state.scope);
-                        dbg!(arg.0, &y);
-                        state.scope.insert(arg.0, y);
-                        let res = body.map(state);
-                        state.scope.last_scope();
+                        self.bindings.insert(arg.scope, passed);
+                        let capture_keys = captures.keys().copied().collect::<Vec<_>>();
+                        self.bindings.extend(captures);
+                        let res = self.map_expr(body);
+                        self.bindings.remove(&arg.scope);
+                        for scope in capture_keys {
+                            self.bindings.remove(&scope);
+                        }
                         res
                     }
                     Value::Number(_) => panic!(),

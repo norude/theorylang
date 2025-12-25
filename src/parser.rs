@@ -1,5 +1,5 @@
-use crate::lowering::level0::{Binding, Expr,  LambdaFunction};
 use crate::common::Ident;
+use crate::lowering::level0::{Binding, Expr};
 use chumsky::prelude::*;
 
 macro_rules! parser {
@@ -44,12 +44,12 @@ fn expression<'a>() -> parser!('a: Expr<'a>) {
             .delimited_by(op('|'), op('|'))
             .then(expression.clone())
             .map(|(args, body)| {
-                args.into_iter().rev().fold(body, |body, arg| {
-                    Expr::LambdaFunction(LambdaFunction {
+                args.into_iter()
+                    .rev()
+                    .fold(body, |body, arg| Expr::LambdaFunction {
                         arg,
                         body: Box::new(body),
                     })
-                })
             });
         let parenthesised = expression.clone().delimited_by(op('('), op(')'));
         let number = number().map(Expr::Number);
