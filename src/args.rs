@@ -3,7 +3,7 @@ use clap::Parser;
 #[command(version, about, long_about = None)]
 pub struct Args {
     #[arg()]
-    pub file: String,
+    pub file: Option<String>,
 }
 pub fn get_args() -> Args {
     Args::parse()
