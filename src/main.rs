@@ -8,14 +8,32 @@ mod common {
         COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct Scope(usize);
-    impl Scope {
+    pub struct Id(usize);
+    impl Id {
         pub fn new() -> Self {
             Self(get_id())
         }
     }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct Scope(Id);
+    impl Scope {
+        pub fn new() -> Self {
+            Self(Id::new())
+        }
+    }
     #[derive(Clone, PartialEq, Eq, Copy, Hash)]
-    pub struct Ident<'a>(pub &'a str);
+    pub enum Ident<'a> {
+        Real(&'a str),
+        CompilerInserted(Id),
+    }
+
+    impl Ident<'_> {
+        pub fn unique() -> Self {
+            Self::CompilerInserted(Id::new())
+        }
+    }
+
     impl std::fmt::Debug for Ident<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{self}")
@@ -23,7 +41,10 @@ mod common {
     }
     impl std::fmt::Display for Ident<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.0)
+            match self {
+                Self::Real(s) => write!(f, "{s}"),
+                Self::CompilerInserted(id) => write!(f, "#{}", id.0),
+            }
         }
     }
 }

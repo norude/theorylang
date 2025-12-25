@@ -1,9 +1,9 @@
-use std::collections::HashSet;
-
-/// This level gives a unique scope for every binding
-/// and captures them for lambda functions
+//! This level gives a unique scope for every binding
+//! and captures them for lambda functions
+//! It also desugars composition binops
 use super::level0;
 use crate::common::{Ident, Scope};
+use std::collections::HashSet;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct State<'a> {
@@ -14,6 +14,13 @@ pub struct State<'a> {
                                                   // OPTIM: make this a bisect thing based on the order of usize-s
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum BinaryOpKind {
+    Call,           // a b
+    Addition,       // a + b
+    Multiplication, // a * b
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Expr<'a> {
     Number(i32),
@@ -22,13 +29,21 @@ pub enum Expr<'a> {
         body: Box<Self>,
         captured: HashSet<Binding<'a>>,
     },
-    Addition(Box<Self>, Box<Self>),
-    Multiplication(Box<Self>, Box<Self>),
-    Call(Box<Self>, Box<Self>),
+    BinaryOperation(Box<Self>, BinaryOpKind, Box<Self>),
     Referal {
         name: Ident<'a>,
         scope: Scope,
     },
+}
+
+impl std::fmt::Display for BinaryOpKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Call => write!(f, " "),
+            Self::Addition => write!(f, " + "),
+            Self::Multiplication => write!(f, " * "),
+        }
+    }
 }
 
 impl std::fmt::Display for Expr<'_> {
@@ -36,9 +51,7 @@ impl std::fmt::Display for Expr<'_> {
         match self {
             Expr::Number(n) => write!(f, "{n}"),
             Expr::LambdaFunction { arg, body, .. } => write!(f, "|{arg}| ({body})"),
-            Expr::Addition(a, b) => write!(f, "({a} + {b})"),
-            Expr::Multiplication(a, b) => write!(f, "({a} * {b})"),
-            Expr::Call(a, b) => write!(f, "({a} {b})"),
+            Expr::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
             Expr::Referal { name, .. } => write!(f, "{name}"),
         }
     }
@@ -87,15 +100,40 @@ impl<'a> State<'a> {
                     captured,
                 }
             }
-            level0::Expr::Addition(a, b) => {
-                Expr::Addition(Box::new(self.map_expr(*a)), Box::new(self.map_expr(*b)))
+
+            level0::Expr::BinaryOperation(lhs, kind, rhs) => {
+                macro_rules! simple {
+                    ($op:ident) => {
+                        Expr::BinaryOperation(
+                            Box::new(self.map_expr(*lhs)),
+                            BinaryOpKind::$op,
+                            Box::new(self.map_expr(*rhs)),
+                        )
+                    };
+                }
+                match kind {
+                    level0::BinaryOpKind::Call => simple!(Call),
+                    level0::BinaryOpKind::Addition => simple!(Addition),
+                    level0::BinaryOpKind::Multiplication => simple!(Multiplication),
+                    level0::BinaryOpKind::Composition => {
+                        // a.b -> |point|a(b(point))
+                        let point = Ident::unique();
+                        self.map_expr(level0::Expr::LambdaFunction {
+                            arg: level0::Binding(point),
+                            body: Box::new(level0::Expr::BinaryOperation(
+                                lhs,
+                                level0::BinaryOpKind::Call,
+                                Box::new(level0::Expr::BinaryOperation(
+                                    rhs,
+                                    level0::BinaryOpKind::Call,
+                                    Box::new(level0::Expr::Referal(point)),
+                                )),
+                            )),
+                        })
+                    }
+                }
             }
-            level0::Expr::Multiplication(a, b) => {
-                Expr::Multiplication(Box::new(self.map_expr(*a)), Box::new(self.map_expr(*b)))
-            }
-            level0::Expr::Call(a, b) => {
-                Expr::Call(Box::new(self.map_expr(*a)), Box::new(self.map_expr(*b)))
-            }
+
             level0::Expr::Referal(name) => {
                 let (idx, &relevant_binding) = self
                     .bindings

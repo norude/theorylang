@@ -4,12 +4,28 @@ use crate::common::Ident;
 pub struct Binding<'a>(pub Ident<'a>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum BinaryOpKind {
+    Call,           // a b
+    Addition,       // a + b
+    Multiplication, // a * b
+    Composition,    // a . b
+}
+impl std::fmt::Display for BinaryOpKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Call => write!(f, " "),
+            Self::Addition => write!(f, " + "),
+            Self::Multiplication => write!(f, " * "),
+            Self::Composition => write!(f, " . "),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expr<'a> {
     Number(i32),
     LambdaFunction { arg: Binding<'a>, body: Box<Self> },
-    Addition(Box<Self>, Box<Self>),
-    Multiplication(Box<Self>, Box<Self>),
-    Call(Box<Self>, Box<Self>),
+    BinaryOperation(Box<Self>, BinaryOpKind, Box<Self>),
     Referal(Ident<'a>),
 }
 
@@ -24,9 +40,7 @@ impl std::fmt::Display for Expr<'_> {
         match self {
             Expr::Number(n) => write!(f, "{n}"),
             Expr::LambdaFunction { arg, body } => write!(f, "|{arg}| ({body})"),
-            Expr::Addition(a, b) => write!(f, "({a} + {b})"),
-            Expr::Multiplication(a, b) => write!(f, "({a} * {b})"),
-            Expr::Call(a, b) => write!(f, "({a} {b})"),
+            Expr::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
             Expr::Referal(name) => write!(f, "{name}"),
         }
     }

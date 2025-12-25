@@ -1,5 +1,5 @@
 use crate::common::Ident;
-use crate::lowering::level0::{Binding, Expr};
+use crate::lowering::level0::{BinaryOpKind, Binding, Expr};
 use chumsky::prelude::*;
 
 macro_rules! parser {
@@ -17,7 +17,7 @@ fn ident<'a>() -> parser!('a: Ident<'a>) {
                 .repeated(),
         )
         .to_slice()
-        .map(Ident)
+        .map(Ident::Real)
         .padded()
         .labelled("identifier")
 }
@@ -59,15 +59,22 @@ fn expression<'a>() -> parser!('a: Expr<'a>) {
         let expr = expr
             .clone()
             .foldl(op('*').ignore_then(expr).repeated(), |lhs, rhs| {
-                Expr::Multiplication(Box::new(lhs), Box::new(rhs))
+                Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Multiplication, Box::new(rhs))
             });
         let expr = expr
             .clone()
             .foldl(op('+').ignore_then(expr).repeated(), |lhs, rhs| {
-                Expr::Addition(Box::new(lhs), Box::new(rhs))
+                Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Addition, Box::new(rhs))
             });
+
+        let expr = expr
+            .clone()
+            .foldl(op('.').ignore_then(expr).repeated(), |lhs, rhs| {
+                Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Composition, Box::new(rhs))
+            });
+
         let expr = expr.clone().foldl(expr.repeated(), |lhs, rhs| {
-            Expr::Call(Box::new(lhs), Box::new(rhs))
+            Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Call, Box::new(rhs))
         });
 
         expr.padded().labelled("expression")
