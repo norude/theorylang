@@ -5,13 +5,58 @@ use super::level0;
 use crate::common::{Ident, Scope};
 use std::collections::HashSet;
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+mod keyed_stack {
+    use std::collections::HashMap;
+    use std::hash::Hash;
+    #[derive(Debug, Clone)]
+    pub struct KeyedStack<K, V> {
+        stacks: HashMap<K, Vec<(usize, V)>>,
+        length: usize,
+    }
+
+    impl<K, V> Default for KeyedStack<K, V> {
+        fn default() -> Self {
+            Self {
+                stacks: HashMap::new(),
+                length: 0,
+            }
+        }
+    }
+
+    impl<K: Hash + Eq, V> KeyedStack<K, V> {
+        pub const fn len(&self) -> usize {
+            self.length
+        }
+        pub fn push(&mut self, key: K, value: V) {
+            self.stacks
+                .entry(key)
+                .or_default()
+                .push((self.length, value));
+            self.length += 1;
+        }
+        pub fn pop(&mut self, key: &K) -> Option<V> {
+            self.length -= 1;
+            self.stacks
+                .get_mut(key)
+                .and_then(|stack| stack.pop().map(|(_, v)| v))
+        }
+        pub fn find(&self, key: &K) -> Option<(usize, &V)> {
+            self.stacks
+                .get(key)
+                .and_then(|stack| stack.last().map(|(idx, v)| (*idx, v)))
+        }
+    }
+}
+use keyed_stack::KeyedStack;
+
+#[derive(Debug, Default, Clone)]
 pub struct State<'a> {
-    bindings: Vec<Binding<'a>>, // a stack with global bindings at the bottom
-    // OPTIM: make this a HashMap of Stacks instead of a Stack
-    captures: Vec<(usize, HashSet<Binding<'a>>)>, // for a binding, whose idx < captures[_].0,
-                                                  // its scope should be put in the captures[_].1,.
-                                                  // OPTIM: make this a bisect thing based on the order of usize-s
+    bindings: KeyedStack<Ident<'a>, Binding>, // this is a stack
+    // with the most global bindings at the bottom.
+    // It's keyed because most of the time, Idents are diffrent
+    captures: Vec<(usize, HashSet<Binding>)>, // for a binding, whose idx < captures[_].0,
+                                              // its scope should be put in the captures[_].1,.
+                                              // should be sorted by the .0
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -22,16 +67,15 @@ pub enum BinaryOpKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Expr<'a> {
+pub enum Expr {
     Number(i32),
     LambdaFunction {
-        arg: Binding<'a>,
+        arg: Binding,
         body: Box<Self>,
-        captured: HashSet<Binding<'a>>,
+        captured: HashSet<Binding>,
     },
     BinaryOperation(Box<Self>, BinaryOpKind, Box<Self>),
     Referal {
-        name: Ident<'a>,
         scope: Scope,
     },
 }
@@ -46,52 +90,51 @@ impl std::fmt::Display for BinaryOpKind {
     }
 }
 
-impl std::fmt::Display for Expr<'_> {
+impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expr::Number(n) => write!(f, "{n}"),
-            Expr::LambdaFunction { arg, body, .. } => write!(f, "|{arg}| ({body})"),
-            Expr::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
-            Expr::Referal { name, .. } => write!(f, "{name}"),
+            Self::Number(n) => write!(f, "{n}"),
+            Self::LambdaFunction { arg, body, .. } => write!(f, "|{arg}| ({body})"),
+            Self::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
+            Self::Referal { scope } => write!(f, "{scope}"),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Eq)]
-pub struct Binding<'a> {
-    pub name: Ident<'a>,
+pub struct Binding {
     pub scope: Scope,
 }
 
-impl std::fmt::Display for Binding<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+impl std::fmt::Display for Binding {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.scope)
     }
 }
 
-impl std::hash::Hash for Binding<'_> {
+impl std::hash::Hash for Binding {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.scope.hash(state);
     }
 }
 
-impl PartialEq for Binding<'_> {
+impl PartialEq for Binding {
     fn eq(&self, other: &Self) -> bool {
         self.scope == other.scope
     }
 }
 
 impl<'a> State<'a> {
-    pub fn map_expr(&mut self, expr: level0::Expr<'a>) -> Expr<'a> {
+    pub fn map_expr(&mut self, expr: level0::Expr<'a>) -> Expr {
         match expr {
             level0::Expr::Number(a) => Expr::Number(a),
             level0::Expr::LambdaFunction { arg, body } => {
                 self.captures.push((self.bindings.len(), HashSet::new()));
-                self.introduce_binding(arg);
+                let key = self.introduce_binding(arg);
 
                 let body = Box::new(self.map_expr(*body));
 
-                let arg = self.bindings.pop().unwrap();
+                let arg = self.bindings.pop(&key).unwrap();
                 let (_, captured) = self.captures.pop().unwrap();
 
                 Expr::LambdaFunction {
@@ -116,20 +159,29 @@ impl<'a> State<'a> {
                     level0::BinaryOpKind::Addition => simple!(Addition),
                     level0::BinaryOpKind::Multiplication => simple!(Multiplication),
                     level0::BinaryOpKind::Composition => {
-                        // a.b -> |point|a(b(point))
-                        let point = Ident::unique();
-                        self.map_expr(level0::Expr::LambdaFunction {
-                            arg: level0::Binding(point),
-                            body: Box::new(level0::Expr::BinaryOperation(
-                                lhs,
-                                level0::BinaryOpKind::Call,
-                                Box::new(level0::Expr::BinaryOperation(
-                                    rhs,
-                                    level0::BinaryOpKind::Call,
-                                    Box::new(level0::Expr::Referal(point)),
+                        // a.b -> |arg|a(b(point))
+                        let arg = Binding {
+                            scope: Scope::new(),
+                        };
+
+                        self.captures.push((self.bindings.len(), HashSet::new()));
+                        let l = self.map_expr(*lhs);
+                        let r = self.map_expr(*rhs);
+                        let (_, captured) = self.captures.pop().unwrap();
+
+                        Expr::LambdaFunction {
+                            captured,
+                            arg,
+                            body: Box::new(Expr::BinaryOperation(
+                                Box::new(l),
+                                BinaryOpKind::Call,
+                                Box::new(Expr::BinaryOperation(
+                                    Box::new(r),
+                                    BinaryOpKind::Call,
+                                    Box::new(Expr::Referal { scope: arg.scope }),
                                 )),
                             )),
-                        })
+                        }
                     }
                 }
             }
@@ -137,27 +189,29 @@ impl<'a> State<'a> {
             level0::Expr::Referal(name) => {
                 let (idx, &relevant_binding) = self
                     .bindings
-                    .iter()
-                    .enumerate()
-                    .rev()
-                    .find(|b| b.1.name == name)
+                    .find(&name)
                     .expect("this binding wasn't found"); // TODO: report this properly
-                for (cutoff, set) in &mut self.captures {
-                    if idx < *cutoff {
-                        set.insert(relevant_binding);
-                    }
+
+                let first_valid = self
+                    .captures
+                    .binary_search_by_key(&idx, |(cutoff, _)| *cutoff)
+                    .map_or_else(|i| i, |i| i + 1);
+                for (_, set) in self.captures.iter_mut().skip(first_valid) {
+                    set.insert(relevant_binding);
                 }
                 Expr::Referal {
-                    name,
                     scope: relevant_binding.scope,
                 }
             }
         }
     }
-    pub fn introduce_binding(&mut self, binding: level0::Binding<'a>) {
-        self.bindings.push(Binding {
-            name: binding.0,
-            scope: Scope::new(),
-        });
+    pub fn introduce_binding(&mut self, binding: level0::Binding<'a>) -> Ident<'a> {
+        self.bindings.push(
+            binding.0,
+            Binding {
+                scope: Scope::new(),
+            },
+        );
+        binding.0
     }
 }

@@ -17,7 +17,7 @@ fn ident<'a>() -> parser!('a: Ident<'a>) {
                 .repeated(),
         )
         .to_slice()
-        .map(Ident::Real)
+        .map(Ident)
         .padded()
         .labelled("identifier")
 }

@@ -23,16 +23,7 @@ mod common {
         }
     }
     #[derive(Clone, PartialEq, Eq, Copy, Hash)]
-    pub enum Ident<'a> {
-        Real(&'a str),
-        CompilerInserted(Id),
-    }
-
-    impl Ident<'_> {
-        pub fn unique() -> Self {
-            Self::CompilerInserted(Id::new())
-        }
-    }
+    pub struct Ident<'a>(pub &'a str);
 
     impl std::fmt::Debug for Ident<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -41,10 +32,13 @@ mod common {
     }
     impl std::fmt::Display for Ident<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                Self::Real(s) => write!(f, "{s}"),
-                Self::CompilerInserted(id) => write!(f, "#{}", id.0),
-            }
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl std::fmt::Display for Scope {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "#{}", self.0.0)
         }
     }
 }

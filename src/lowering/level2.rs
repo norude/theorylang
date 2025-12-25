@@ -4,33 +4,33 @@ use crate::common::Scope;
 use crate::lowering::level1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Value<'a> {
+pub enum Value {
     Number(i32),
     Function {
-        arg: level1::Binding<'a>,
-        body: level1::Expr<'a>,
-        captures: HashMap<level1::Binding<'a>, Self>,
+        arg: level1::Binding,
+        body: level1::Expr,
+        captures: HashMap<level1::Binding, Self>,
     },
 }
 
-impl std::fmt::Display for Value<'_> {
+impl std::fmt::Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Value::Number(n) => write!(f, "{n}"),
-            Value::Function {
+            Self::Number(n) => write!(f, "{n}"),
+            Self::Function {
                 arg,
                 body,
                 captures,
             } => {
                 if !captures.is_empty() {
-                    write!(f, "captured(")?;
+                    write!(f, "captured[")?;
                     for (idx, (binding, value)) in captures.iter().enumerate() {
-                        write!(f, "{}={value}", binding.name)?;
+                        write!(f, "{binding}={value}")?;
                         if idx != captures.len() - 1 {
                             write!(f, ", ")?;
                         }
                     }
-                    write!(f, ") ")?;
+                    write!(f, "] ")?;
                 }
                 write!(f, "|{arg}| {body}")
             }
@@ -39,12 +39,12 @@ impl std::fmt::Display for Value<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct State<'a> {
-    bindings: HashMap<Scope, Value<'a>>,
+pub struct State {
+    bindings: HashMap<Scope, Value>,
 }
 
-impl<'a> State<'a> {
-    pub fn map_expr(&mut self, expr: level1::Expr<'a>) -> Value<'a> {
+impl State {
+    pub fn map_expr(&mut self, expr: level1::Expr) -> Value {
         match expr {
             level1::Expr::Number(x) => Value::Number(x),
             level1::Expr::LambdaFunction {
@@ -60,7 +60,7 @@ impl<'a> State<'a> {
                     .collect(),
             },
 
-            level1::Expr::Referal { scope, name: _ } => self.bindings.get(&scope).unwrap().clone(),
+            level1::Expr::Referal { scope } => self.bindings.get(&scope).unwrap().clone(),
             level1::Expr::BinaryOperation(lhs, kind, rhs) => {
                 use level1::BinaryOpKind as Op;
                 let lhs = self.map_expr(*lhs);
@@ -83,15 +83,12 @@ impl<'a> State<'a> {
                             },
                             passed,
                         ) => {
+                            let old_bindings = self.bindings.clone();
                             self.bindings.insert(arg.scope, passed);
-                            let capture_keys = captures.keys().copied().collect::<Vec<_>>();
                             self.bindings
                                 .extend(captures.into_iter().map(|(k, v)| (k.scope, v)));
                             let res = self.map_expr(body);
-                            self.bindings.remove(&arg.scope);
-                            for scope in capture_keys {
-                                self.bindings.remove(&scope.scope);
-                            }
+                            self.bindings = old_bindings;
                             res
                         }
                         _ => panic!(),

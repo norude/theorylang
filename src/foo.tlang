@@ -1,1 +1,17 @@
-(|a| a.a ) (|x| x*2) 1
+(|vec|
+(|push|
+(|fold|
+(|map|  
+    (|array|
+
+
+     fold (map array |x|x+1) 1 |x y| x*y
+
+
+    ) (push (push vec 3) 4)
+) |array op| fold array vec (|left right| push left (op right))
+) |x| x
+) |array new| |last op| op(array last op)(new)
+) |last op| last
+
+
