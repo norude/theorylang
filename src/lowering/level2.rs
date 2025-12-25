@@ -9,8 +9,33 @@ pub enum Value<'a> {
     Function {
         arg: level1::Binding<'a>,
         body: level1::Expr<'a>,
-        captures: HashMap<Scope, Self>,
+        captures: HashMap<level1::Binding<'a>, Self>,
     },
+}
+
+impl std::fmt::Display for Value<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Number(n) => write!(f, "{n}"),
+            Value::Function {
+                arg,
+                body,
+                captures,
+            } => {
+                if !captures.is_empty() {
+                    write!(f, "captured(")?;
+                    for (idx, (binding, value)) in captures.iter().enumerate() {
+                        write!(f, "{}={value}", binding.name)?;
+                        if idx != captures.len() - 1 {
+                            write!(f, ", ")?;
+                        }
+                    }
+                    write!(f, ") ")?;
+                }
+                write!(f, "|{arg}| {body}")
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -31,7 +56,7 @@ impl<'a> State<'a> {
                 body: *body,
                 captures: captured
                     .into_iter()
-                    .map(|s| (s, self.bindings.get(&s).unwrap().clone()))
+                    .map(|s| (s, self.bindings.get(&s.scope).unwrap().clone()))
                     .collect(),
             },
             level1::Expr::Addition(x, y) => {
@@ -62,11 +87,12 @@ impl<'a> State<'a> {
                     } => {
                         self.bindings.insert(arg.scope, passed);
                         let capture_keys = captures.keys().copied().collect::<Vec<_>>();
-                        self.bindings.extend(captures);
+                        self.bindings
+                            .extend(captures.into_iter().map(|(k, v)| (k.scope, v)));
                         let res = self.map_expr(body);
                         self.bindings.remove(&arg.scope);
                         for scope in capture_keys {
-                            self.bindings.remove(&scope);
+                            self.bindings.remove(&scope.scope);
                         }
                         res
                     }

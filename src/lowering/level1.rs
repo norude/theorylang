@@ -9,9 +9,9 @@ use crate::common::{Ident, Scope};
 pub struct State<'a> {
     bindings: Vec<Binding<'a>>, // a stack with global bindings at the bottom
     // OPTIM: make this a HashMap of Stacks instead of a Stack
-    captures: Vec<(usize, HashSet<Scope>)>, // for a binding, whose idx < captures[_].0,
-                                            // its scope should be put in the captures[_].1,.
-                                            // OPTIM: make this a bisect thing based on the order of usize-s
+    captures: Vec<(usize, HashSet<Binding<'a>>)>, // for a binding, whose idx < captures[_].0,
+                                                  // its scope should be put in the captures[_].1,.
+                                                  // OPTIM: make this a bisect thing based on the order of usize-s
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub enum Expr<'a> {
     LambdaFunction {
         arg: Binding<'a>,
         body: Box<Self>,
-        captured: HashSet<Scope>,
+        captured: HashSet<Binding<'a>>,
     },
     Addition(Box<Self>, Box<Self>),
     Multiplication(Box<Self>, Box<Self>),
@@ -31,10 +31,29 @@ pub enum Expr<'a> {
     },
 }
 
-#[derive(Debug, Clone, Eq)]
+impl std::fmt::Display for Expr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Expr::Number(n) => write!(f, "{n}"),
+            Expr::LambdaFunction { arg, body, .. } => write!(f, "|{arg}| ({body})"),
+            Expr::Addition(a, b) => write!(f, "({a} + {b})"),
+            Expr::Multiplication(a, b) => write!(f, "({a} * {b})"),
+            Expr::Call(a, b) => write!(f, "({a} {b})"),
+            Expr::Referal { name, .. } => write!(f, "{name}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq)]
 pub struct Binding<'a> {
     pub name: Ident<'a>,
     pub scope: Scope,
+}
+
+impl std::fmt::Display for Binding<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name)
+    }
 }
 
 impl std::hash::Hash for Binding<'_> {
@@ -78,7 +97,7 @@ impl<'a> State<'a> {
                 Expr::Call(Box::new(self.map_expr(*a)), Box::new(self.map_expr(*b)))
             }
             level0::Expr::Referal(name) => {
-                let (idx, &Binding { name, scope }) = self
+                let (idx, &relevant_binding) = self
                     .bindings
                     .iter()
                     .enumerate()
@@ -87,10 +106,13 @@ impl<'a> State<'a> {
                     .expect("this binding wasn't found"); // TODO: report this properly
                 for (cutoff, set) in &mut self.captures {
                     if idx < *cutoff {
-                        set.insert(scope);
+                        set.insert(relevant_binding);
                     }
                 }
-                Expr::Referal { name, scope }
+                Expr::Referal {
+                    name,
+                    scope: relevant_binding.scope,
+                }
             }
         }
     }

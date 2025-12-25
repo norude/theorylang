@@ -18,7 +18,12 @@ mod common {
     pub struct Ident<'a>(pub &'a str);
     impl std::fmt::Debug for Ident<'_> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self.0)
+            write!(f, "{self}")
+        }
+    }
+    impl std::fmt::Display for Ident<'_> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
         }
     }
 }
@@ -58,7 +63,7 @@ fn main() {
         }
         Ok(tree) => tree,
     };
-    println!("{tree:?}");
+    println!("{tree}");
     let value = tree.lower_all_the_way();
-    println!("{value:?}");
+    println!("{value}");
 }
