@@ -48,7 +48,11 @@ impl std::fmt::Display for Expr<'_> {
         match self {
             Expr::Number(n) => write!(f, "{n}"),
             Expr::LambdaFunction { arg, body } => write!(f, "|{arg}| ({body})"),
-            Expr::LetBinding { name, value, body: scope } => write!(f, "let {name} = {value} in {scope}"),
+            Expr::LetBinding {
+                name,
+                value,
+                body: scope,
+            } => write!(f, "let {name} = {value} in\n{scope}"),
             Expr::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
             Expr::Referal(name) => write!(f, "{name}"),
         }
