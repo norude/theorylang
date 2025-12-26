@@ -22,7 +22,7 @@ impl std::fmt::Display for Value {
                 body,
                 captures,
             } => {
-                write!(f, "|{arg}| ")?;
+                write!(f, "{arg} -> ")?;
                 for (binding, value) in captures {
                     write!(f, "let {binding}={value} in ")?;
                 }

@@ -38,16 +38,16 @@ pub enum Expr<'a> {
 }
 
 impl std::fmt::Display for Binding<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
 impl std::fmt::Display for Expr<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Expr::Number(n) => write!(f, "{n}"),
-            Expr::LambdaFunction { arg, body } => write!(f, "|{arg}| ({body})"),
+            Expr::LambdaFunction { arg, body } => write!(f, "{arg} -> {body}"),
             Expr::LetBinding {
                 name,
                 value,

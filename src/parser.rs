@@ -49,7 +49,7 @@ fn number<'a>() -> parser!('a: i32) {
         .labelled("number")
 }
 
-fn op<'a>(x: char) -> parser!('a: ()) {
+fn op<'a>(x: &'static str) -> parser!('a: ()) {
     just(x).padded().ignored()
 }
 
@@ -60,22 +60,15 @@ fn binding<'a>() -> parser!('a: Binding<'a>) {
 fn expression<'a>() -> parser!('a: Expr<'a>) {
     recursive(|expression| {
         let lambda = binding()
-            .repeated()
-            .at_least(1)
-            .collect::<Vec<_>>()
-            .delimited_by(op('|'), op('|'))
+            .then_ignore(op("->"))
             .then(expression.clone())
-            .map(|(args, body)| {
-                args.into_iter()
-                    .rev()
-                    .fold(body, |body, arg| Expr::LambdaFunction {
-                        arg,
-                        body: Box::new(body),
-                    })
+            .map(|(arg, body)| Expr::LambdaFunction {
+                arg,
+                body: Box::new(body),
             });
         let let_binding = kw_let()
             .ignore_then(binding())
-            .then_ignore(op('='))
+            .then_ignore(op("="))
             .then(expression.clone())
             .then_ignore(kw_in())
             .then(expression.clone())
@@ -84,25 +77,25 @@ fn expression<'a>() -> parser!('a: Expr<'a>) {
                 value: Box::new(value),
                 body: Box::new(body),
             });
-        let parenthesised = expression.clone().delimited_by(op('('), op(')'));
+        let parenthesised = expression.clone().delimited_by(op("("), op(")"));
         let number = number().map(Expr::Number);
         let referal = ident().map(Expr::Referal);
 
         let expr = choice((let_binding, lambda, parenthesised, number, referal)).padded();
         let expr = expr
             .clone()
-            .foldl(op('*').ignore_then(expr).repeated(), |lhs, rhs| {
+            .foldl(op("*").ignore_then(expr).repeated(), |lhs, rhs| {
                 Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Multiplication, Box::new(rhs))
             });
         let expr = expr
             .clone()
-            .foldl(op('+').ignore_then(expr).repeated(), |lhs, rhs| {
+            .foldl(op("+").ignore_then(expr).repeated(), |lhs, rhs| {
                 Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Addition, Box::new(rhs))
             });
 
         let expr = expr
             .clone()
-            .foldl(op('.').ignore_then(expr).repeated(), |lhs, rhs| {
+            .foldl(op(".").ignore_then(expr).repeated(), |lhs, rhs| {
                 Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Composition, Box::new(rhs))
             });
 

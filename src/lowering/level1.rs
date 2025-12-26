@@ -94,7 +94,7 @@ impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Number(n) => write!(f, "{n}"),
-            Self::LambdaFunction { arg, body, .. } => write!(f, "|{arg}| ({body})"),
+            Self::LambdaFunction { arg, body, .. } => write!(f, "{arg} -> {body}"),
             Self::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
             Self::Referal { scope } => write!(f, "{scope}"),
         }
