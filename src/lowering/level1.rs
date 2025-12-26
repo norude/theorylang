@@ -1,6 +1,6 @@
 //! This level gives a unique scope for every binding
 //! and captures them for lambda functions
-//! It also desugars composition binops
+//! It also desugars composition binops and let bindings
 use super::level0;
 use crate::common::{Ident, Scope};
 use std::collections::HashSet;
@@ -125,44 +125,45 @@ impl PartialEq for Binding {
 }
 
 impl<'a> State<'a> {
+    fn introduce_new_binding_in<T>(
+        &mut self,
+        b: level0::Binding<'a>,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> (T, Binding) {
+        self.bindings.push(
+            b.0,
+            Binding {
+                scope: Scope::new(),
+            },
+        );
+        (f(self), self.bindings.pop(&b.0).unwrap())
+    }
+
+    fn construct_a_function_in(&mut self, f: impl FnOnce(&mut Self) -> (Expr, Binding)) -> Expr {
+        self.captures.push((self.bindings.len(), HashSet::new()));
+        let (body, arg) = f(self);
+        let (_, captured) = self.captures.pop().unwrap();
+        Expr::LambdaFunction {
+            arg,
+            body: Box::new(body),
+            captured,
+        }
+    }
+
     pub fn map_expr(&mut self, expr: level0::Expr<'a>) -> Expr {
         match expr {
             level0::Expr::Number(a) => Expr::Number(a),
-            level0::Expr::LambdaFunction { arg, body } => {
-                self.captures.push((self.bindings.len(), HashSet::new()));
-                let key = self.introduce_binding(arg);
-
-                let body = Box::new(self.map_expr(*body));
-
-                let arg = self.bindings.pop(&key).unwrap();
-                let (_, captured) = self.captures.pop().unwrap();
-
-                Expr::LambdaFunction {
-                    arg,
-                    body,
-                    captured,
-                }
-            }
+            level0::Expr::LambdaFunction { arg, body } => self.construct_a_function_in(|this| {
+                this.introduce_new_binding_in(arg, |this| this.map_expr(*body))
+            }),
             level0::Expr::LetBinding { name, value, body } => {
                 // let name = value in scope -> (|name|body)(value)
                 let value = self.map_expr(*value);
-                self.captures.push((self.bindings.len(), HashSet::new()));
-                let key = self.introduce_binding(name);
+                let fun = self.construct_a_function_in(|this| {
+                    this.introduce_new_binding_in(name, |this| this.map_expr(*body))
+                });
 
-                let body = self.map_expr(*body);
-
-                let name = self.bindings.pop(&key).unwrap();
-                let (_, captured) = self.captures.pop().unwrap();
-
-                Expr::BinaryOperation(
-                    Box::new(Expr::LambdaFunction {
-                        arg: name,
-                        body: Box::new(body),
-                        captured,
-                    }),
-                    BinaryOpKind::Call,
-                    Box::new(value),
-                )
+                Expr::BinaryOperation(Box::new(fun), BinaryOpKind::Call, Box::new(value))
             }
             level0::Expr::BinaryOperation(lhs, kind, rhs) => {
                 macro_rules! simple {
@@ -179,29 +180,22 @@ impl<'a> State<'a> {
                     level0::BinaryOpKind::Addition => simple!(Addition),
                     level0::BinaryOpKind::Multiplication => simple!(Multiplication),
                     level0::BinaryOpKind::Composition => {
-                        // a.b -> |arg|a(b(point))
-                        let arg = Binding {
-                            scope: Scope::new(),
-                        };
-
-                        self.captures.push((self.bindings.len(), HashSet::new()));
-                        let l = self.map_expr(*lhs);
-                        let r = self.map_expr(*rhs);
-                        let (_, captured) = self.captures.pop().unwrap();
-
-                        Expr::LambdaFunction {
-                            captured,
-                            arg,
-                            body: Box::new(Expr::BinaryOperation(
-                                Box::new(l),
-                                BinaryOpKind::Call,
-                                Box::new(Expr::BinaryOperation(
-                                    Box::new(r),
+                        // a.b -> |scope| a(b(scope))
+                        let scope = Scope::new();
+                        self.construct_a_function_in(|this| {
+                            (
+                                Expr::BinaryOperation(
+                                    Box::new(this.map_expr(*lhs)),
                                     BinaryOpKind::Call,
-                                    Box::new(Expr::Referal { scope: arg.scope }),
-                                )),
-                            )),
-                        }
+                                    Box::new(Expr::BinaryOperation(
+                                        Box::new(this.map_expr(*rhs)),
+                                        BinaryOpKind::Call,
+                                        Box::new(Expr::Referal { scope }),
+                                    )),
+                                ),
+                                Binding { scope },
+                            )
+                        })
                     }
                 }
             }
@@ -224,14 +218,5 @@ impl<'a> State<'a> {
                 }
             }
         }
-    }
-    pub fn introduce_binding(&mut self, binding: level0::Binding<'a>) -> Ident<'a> {
-        self.bindings.push(
-            binding.0,
-            Binding {
-                scope: Scope::new(),
-            },
-        );
-        binding.0
     }
 }
