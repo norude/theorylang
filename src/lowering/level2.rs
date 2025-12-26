@@ -22,17 +22,11 @@ impl std::fmt::Display for Value {
                 body,
                 captures,
             } => {
-                if !captures.is_empty() {
-                    write!(f, "captured[")?;
-                    for (idx, (binding, value)) in captures.iter().enumerate() {
-                        write!(f, "{binding}={value}")?;
-                        if idx != captures.len() - 1 {
-                            write!(f, ", ")?;
-                        }
-                    }
-                    write!(f, "] ")?;
+                write!(f, "|{arg}| ")?;
+                for (binding, value) in captures {
+                    write!(f, "let {binding}={value} in ")?;
                 }
-                write!(f, "|{arg}| {body}")
+                write!(f, "{body}")
             }
         }
     }
