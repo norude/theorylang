@@ -8,7 +8,7 @@ pub enum BinaryOpKind {
     Call,           // a b
     Addition,       // a + b
     Multiplication, // a * b
-    Composition,    // a . b
+    Composition,    // a & b
 }
 impl std::fmt::Display for BinaryOpKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -16,7 +16,7 @@ impl std::fmt::Display for BinaryOpKind {
             Self::Call => write!(f, " "),
             Self::Addition => write!(f, " + "),
             Self::Multiplication => write!(f, " * "),
-            Self::Composition => write!(f, " . "),
+            Self::Composition => write!(f, " & "),
         }
     }
 }

@@ -95,7 +95,7 @@ fn expression<'a>() -> parser!('a: Expr<'a>) {
 
         let expr = expr
             .clone()
-            .foldl(op(".").ignore_then(expr).repeated(), |lhs, rhs| {
+            .foldl(op("&").ignore_then(expr).repeated(), |lhs, rhs| {
                 Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Composition, Box::new(rhs))
             });
 
