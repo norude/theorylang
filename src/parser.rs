@@ -99,6 +99,12 @@ fn expression<'a>() -> parser!('a: Expr<'a>) {
                 Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Composition, Box::new(rhs))
             });
 
+        let expr = expr
+            .clone()
+            .foldl(op(">").ignore_then(expr).repeated(), |lhs, rhs| {
+                Expr::BinaryOperation(Box::new(rhs), BinaryOpKind::Call, Box::new(lhs))
+            });
+
         let expr = expr.clone().foldl(expr.repeated(), |lhs, rhs| {
             Expr::BinaryOperation(Box::new(lhs), BinaryOpKind::Call, Box::new(rhs))
         });

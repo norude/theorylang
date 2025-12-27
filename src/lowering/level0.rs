@@ -5,7 +5,7 @@ pub struct Binding<'a>(pub Ident<'a>);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinaryOpKind {
-    Call,           // a b
+    Call,           // a b or b>a
     Addition,       // a + b
     Multiplication, // a * b
     Composition,    // a & b

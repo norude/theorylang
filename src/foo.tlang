@@ -1,9 +1,9 @@
 let vec = last -> op -> last in
-let push = array -> new -> last -> op -> op(array last op)(new) in 
+let push = array -> new -> last -> op -> (array last op)>op new in 
 let fold = x -> x in
-let map = array -> op -> fold array vec (left -> right -> push left (op right)) in
-let array = (push (push vec 3) 4) in
+let map = array -> op -> fold array vec (left -> right -> left>push right>op) in
+let array = (vec>push 3)>push 4 in
 
-fold (map array x -> x+1) 1 x -> y -> x*y
+(array>map x -> x+1)>fold 1 x -> y -> x*y
 
 
