@@ -1,5 +1,6 @@
+use super::InitialLevel;
+use super::level0::{BinaryOpKind, Binding, Expr, GlobalSymbol, Top, Type};
 use crate::common::Ident;
-use crate::lowering::level0::{BinaryOpKind, Binding, Expr};
 use chumsky::prelude::*;
 
 macro_rules! parser {
@@ -39,6 +40,7 @@ fn ident<'a>() -> parser!('a: Ident<'a>) {
 
 keywords! {
     "let" <= kw_let
+    "proc" <= kw_proc
     "in" <= kw_in
 }
 
@@ -55,6 +57,10 @@ fn op<'a>(x: &'static str) -> parser!('a: ()) {
 
 fn binding<'a>() -> parser!('a: Binding<'a>) {
     ident().map(Binding).labelled("binding")
+}
+
+fn global_symbol<'a>() -> parser!('a: GlobalSymbol<'a>) {
+    ident().map(GlobalSymbol).labelled("global symbol")
 }
 
 fn expression<'a>() -> parser!('a: Expr<'a>) {
@@ -79,9 +85,27 @@ fn expression<'a>() -> parser!('a: Expr<'a>) {
             });
         let parenthesised = expression.clone().delimited_by(op("("), op(")"));
         let number = number().map(Expr::Number);
+        let proc_call = global_symbol()
+            .then(
+                expression
+                    .clone()
+                    .separated_by(op(","))
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .delimited_by(op("!("), op(")")),
+            )
+            .map(|(name, args)| Expr::ProcCall { name, args });
         let referal = ident().map(Expr::Referal);
 
-        let expr = choice((let_binding, lambda, parenthesised, number, referal)).padded();
+        let expr = choice((
+            let_binding,
+            lambda,
+            parenthesised,
+            proc_call,
+            number,
+            referal,
+        ))
+        .padded();
         let expr = expr
             .clone()
             .foldl(op("*").ignore_then(expr).repeated(), |lhs, rhs| {
@@ -113,6 +137,38 @@ fn expression<'a>() -> parser!('a: Expr<'a>) {
     })
 }
 
-pub fn parser<'a>() -> parser!('a: Expr<'a>) {
-    expression()
+fn r#type<'a>() -> parser!('a: Type) {
+    let never = just("!").map(|_| Type::Never);
+    let unit = just("()").map(|_| Type::Unit);
+    let i32 = just("i32").map(|_| Type::I32);
+    choice((never, unit, i32)).padded().labelled("type")
+}
+
+fn top<'a>() -> parser!('a: Top<'a>) {
+    let procedure = kw_proc()
+        .ignore_then(global_symbol())
+        .then(
+            binding()
+                .then_ignore(op(":"))
+                .then(r#type())
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(op("("), op(")")),
+        )
+        .then(r#type().or_not())
+        .then_ignore(op("{"))
+        .then(expression())
+        .then_ignore(op("}"))
+        .map(|(((name, args), ret), body)| Top::Procedure {
+            name,
+            args,
+            return_type: ret.unwrap_or_default(),
+            body,
+        });
+
+    choice((procedure,)).padded().labelled("top")
+}
+
+pub fn parser<'a>() -> parser!('a: InitialLevel<'a>) {
+    top().repeated().collect::<Vec<_>>().map(Into::into)
 }

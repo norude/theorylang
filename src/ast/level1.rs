@@ -1,53 +1,11 @@
 //! This level gives a unique scope for every binding
 //! and captures them for lambda functions
 //! It also desugars composition binops and let bindings
+mod keyed_stack;
 use super::level0;
 use crate::common::{Ident, Scope};
-use std::collections::HashSet;
-
-mod keyed_stack {
-    use std::collections::HashMap;
-    use std::hash::Hash;
-    #[derive(Debug, Clone)]
-    pub struct KeyedStack<K, V> {
-        stacks: HashMap<K, Vec<(usize, V)>>,
-        length: usize,
-    }
-
-    impl<K, V> Default for KeyedStack<K, V> {
-        fn default() -> Self {
-            Self {
-                stacks: HashMap::new(),
-                length: 0,
-            }
-        }
-    }
-
-    impl<K: Hash + Eq, V> KeyedStack<K, V> {
-        pub const fn len(&self) -> usize {
-            self.length
-        }
-        pub fn push(&mut self, key: K, value: V) {
-            self.stacks
-                .entry(key)
-                .or_default()
-                .push((self.length, value));
-            self.length += 1;
-        }
-        pub fn pop(&mut self, key: &K) -> Option<V> {
-            self.length -= 1;
-            self.stacks
-                .get_mut(key)
-                .and_then(|stack| stack.pop().map(|(_, v)| v))
-        }
-        pub fn find(&self, key: &K) -> Option<(usize, &V)> {
-            self.stacks
-                .get(key)
-                .and_then(|stack| stack.last().map(|(idx, v)| (*idx, v)))
-        }
-    }
-}
 use keyed_stack::KeyedStack;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Default, Clone)]
 pub struct State<'a> {
@@ -55,8 +13,9 @@ pub struct State<'a> {
     // with the most global bindings at the bottom.
     // It's keyed because most of the time, Idents are diffrent
     captures: Vec<(usize, HashSet<Binding>)>, // for a binding, whose idx < captures[_].0,
-                                              // its scope should be put in the captures[_].1,.
-                                              // should be sorted by the .0
+    // its scope should be put in the captures[_].1,.
+    // should be sorted by the .0
+    globals: HashMap<GlobalSymbol<'a>, Top<'a>>, // isn't captured
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -66,8 +25,18 @@ pub enum BinaryOpKind {
     Multiplication, // a * b
 }
 
+impl std::fmt::Display for BinaryOpKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Self::Call => write!(f, " "),
+            Self::Addition => write!(f, " + "),
+            Self::Multiplication => write!(f, " * "),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Expr {
+pub enum Expr<'a> {
     Number(i32),
     LambdaFunction {
         arg: Binding,
@@ -78,28 +47,35 @@ pub enum Expr {
     Referal {
         scope: Scope,
     },
+    ProcCall {
+        name: GlobalSymbol<'a>,
+        args: Vec<Self>,
+    },
 }
 
-impl std::fmt::Display for BinaryOpKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Call => write!(f, " "),
-            Self::Addition => write!(f, " + "),
-            Self::Multiplication => write!(f, " * "),
-        }
-    }
-}
-
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for Expr<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             Self::Number(n) => write!(f, "{n}"),
             Self::LambdaFunction { arg, body, .. } => write!(f, "{arg} -> {body}"),
             Self::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
             Self::Referal { scope } => write!(f, "{scope}"),
+            Self::ProcCall { name, args } => {
+                write!(f, "{name}!(")?;
+                for (idx, arg) in args.iter().enumerate() {
+                    write!(f, "{arg}")?;
+                    if idx < args.len() - 1 {
+                        write!(f, ", ")?;
+                    }
+                }
+                write!(f, ")")
+            }
         }
     }
 }
+
+type Type = level0::Type;
+type GlobalSymbol<'a> = level0::GlobalSymbol<'a>;
 
 #[derive(Debug, Clone, Copy, Eq)]
 pub struct Binding {
@@ -124,6 +100,16 @@ impl PartialEq for Binding {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Top<'a> {
+    Procedure {
+        name: GlobalSymbol<'a>,
+        args: Vec<(Binding, Type)>,
+        return_type: Type,
+        body: Expr<'a>,
+    },
+}
+
 impl<'a> State<'a> {
     fn introduce_new_binding_in<T>(
         &mut self,
@@ -138,8 +124,30 @@ impl<'a> State<'a> {
         );
         (f(self), self.bindings.pop(&b.0).unwrap())
     }
+    fn introduce_new_bindings_in<T, X>(
+        &mut self,
+        b: Vec<(level0::Binding<'a>, X)>,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> (T, impl Iterator<Item = (Binding, X)>) {
+        for b in &b {
+            self.bindings.push(
+                b.0.0,
+                Binding {
+                    scope: Scope::new(),
+                },
+            );
+        }
+        (
+            f(self),
+            b.into_iter()
+                .map(|(b, x)| (self.bindings.pop(&b.0).unwrap(), x)),
+        )
+    }
 
-    fn construct_a_function_in(&mut self, f: impl FnOnce(&mut Self) -> (Expr, Binding)) -> Expr {
+    fn construct_a_function_in<'b>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> (Expr<'b>, Binding),
+    ) -> Expr<'b> {
         self.captures.push((self.bindings.len(), HashSet::new()));
         let (body, arg) = f(self);
         let (_, captured) = self.captures.pop().unwrap();
@@ -150,7 +158,7 @@ impl<'a> State<'a> {
         }
     }
 
-    pub fn map_expr(&mut self, expr: level0::Expr<'a>) -> Expr {
+    pub fn map_expr(&mut self, expr: level0::Expr<'a>) -> Expr<'a> {
         match expr {
             level0::Expr::Number(a) => Expr::Number(a),
             level0::Expr::LambdaFunction { arg, body } => self.construct_a_function_in(|this| {
@@ -201,11 +209,9 @@ impl<'a> State<'a> {
             }
 
             level0::Expr::Referal(name) => {
-                let (idx, &relevant_binding) = self
-                    .bindings
-                    .find(&name)
-                    .expect("this binding wasn't found"); // TODO: report this properly
-
+                let Some((idx, &relevant_binding)) = self.bindings.find(&name) else {
+                    panic!("that binding wasn't found") // TODO: report it properly
+                };
                 let first_valid = self
                     .captures
                     .binary_search_by_key(&idx, |(cutoff, _)| *cutoff)
@@ -215,6 +221,35 @@ impl<'a> State<'a> {
                 }
                 Expr::Referal {
                     scope: relevant_binding.scope,
+                }
+            }
+
+            level0::Expr::ProcCall { name, args } => {
+                let args = args
+                    .into_iter()
+                    .map(|arg| self.map_expr(arg))
+                    .collect::<Vec<_>>();
+                let _top = self.globals.get(&name).expect("that proc wasn't found");
+                Expr::ProcCall { name, args }
+            }
+        }
+    }
+
+    pub fn map_top(&mut self, top: level0::Top<'a>) -> Top<'a> {
+        match top {
+            level0::Top::Procedure {
+                name,
+                args,
+                return_type,
+                body,
+            } => {
+                let (body, args) = self.introduce_new_bindings_in(args, |this| this.map_expr(body));
+
+                Top::Procedure {
+                    name,
+                    args: args.collect(),
+                    return_type,
+                    body,
                 }
             }
         }

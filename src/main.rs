@@ -1,53 +1,10 @@
 mod args;
-mod lowering;
-mod parser;
-mod common {
-    // TODO: move this to a better place
-    static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
-    fn get_id() -> usize {
-        COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-    }
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct Id(usize);
-    impl Id {
-        pub fn new() -> Self {
-            Self(get_id())
-        }
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-    pub struct Scope(Id);
-    impl Scope {
-        pub fn new() -> Self {
-            Self(Id::new())
-        }
-    }
-    #[derive(Clone, PartialEq, Eq, Copy, Hash)]
-    pub struct Ident<'a>(pub &'a str);
-
-    impl std::fmt::Debug for Ident<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{self}")
-        }
-    }
-    impl std::fmt::Display for Ident<'_> {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}", self.0)
-        }
-    }
-
-    impl std::fmt::Display for Scope {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "#{}", self.0.0)
-        }
-    }
-}
+mod ast;
+mod common;
 use crate::args::get_args;
-use crate::lowering::Lower;
-use crate::parser::parser;
+use crate::ast::parser;
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::Parser;
-use std::fs;
 use std::path::Path;
 
 fn report_err(path: &str, text: &str, err: &chumsky::prelude::Rich<'_, char>) {
@@ -75,7 +32,7 @@ fn report_err(path: &str, text: &str, err: &chumsky::prelude::Rich<'_, char>) {
 fn main() -> rustyline::Result<()> {
     let args = get_args();
     if let Some(path) = args.file {
-        let text = fs::read_to_string(Path::new(&path)).unwrap();
+        let text = std::fs::read_to_string(Path::new(&path)).unwrap();
         let Ok(tree) = parser().parse(&text).into_result().map_err(|errs| {
             for err in errs {
                 report_err(&path, &text, &err);
@@ -84,8 +41,8 @@ fn main() -> rustyline::Result<()> {
             return Ok(());
         };
         println!("{tree}");
-        let value = tree.lower_all_the_way();
-        println!("{value}");
+        let lowered = tree.lower_all_the_way();
+        lowered.eval();
         return Ok(());
     }
     let mut rl = rustyline::DefaultEditor::new()?;
@@ -103,7 +60,7 @@ fn main() -> rustyline::Result<()> {
             continue;
         };
 
-        let value = tree.lower_all_the_way();
-        println!("{value}");
+        let lowered = tree.lower_all_the_way();
+        lowered.eval();
     }
 }
