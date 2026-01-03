@@ -30,6 +30,7 @@ impl<'a> InitialLevel<'a> {
             .into_iter()
             .map(|top| state1.map_top(top))
             .collect::<Vec<_>>();
+        state1.ensure_main_exists();
         FinalLevel(level1)
     }
 }

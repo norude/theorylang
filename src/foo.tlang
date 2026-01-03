@@ -1,12 +1,20 @@
-proc main() {
+proc vec() -> () {
+    last -> op -> last
+}
 
-    let vec = last -> op -> last in
-    let push = array -> new -> last -> op -> (array last op)>op new in 
+proc push(array:(), new:i32) -> () {
+    last -> op -> (array last op)>op new
+}
+
+proc map(array:(),op:()) -> () {
     let fold = x -> x in
-    let map = array -> op -> fold array vec (left -> right -> left>push right>op) in
-    let array = (vec>push 3)>push 4 in
+    let push_op = array -> new -> push!(array, new>op) in
+    fold array vec!() push_op
+}
 
-    (array>map x -> x+1)>fold 1 x -> y -> x*y
-
+proc main() {
+    let fold = x -> x in
+    let array = push!(push!(vec!(), 3), 4) in
+    map!(array, x -> x+1)>fold 1 x -> y -> x*y
 }
 

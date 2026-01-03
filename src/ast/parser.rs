@@ -151,11 +151,17 @@ fn top<'a>() -> parser!('a: Top<'a>) {
             binding()
                 .then_ignore(op(":"))
                 .then(r#type())
-                .repeated()
+                .separated_by(op(","))
+                .allow_trailing()
                 .collect::<Vec<_>>()
                 .delimited_by(op("("), op(")")),
         )
-        .then(r#type().or_not())
+        .then(
+            op("->")
+                .ignore_then(r#type())
+                .labelled("return type")
+                .or_not(),
+        )
         .then_ignore(op("{"))
         .then(expression())
         .then_ignore(op("}"))

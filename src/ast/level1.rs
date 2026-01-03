@@ -210,7 +210,7 @@ impl<'a> State<'a> {
 
             level0::Expr::Referal(name) => {
                 let Some((idx, &relevant_binding)) = self.bindings.find(&name) else {
-                    panic!("that binding wasn't found") // TODO: report it properly
+                    panic!("that binding ({name}) wasn't found") // TODO: report it properly
                 };
                 let first_valid = self
                     .captures
@@ -229,7 +229,9 @@ impl<'a> State<'a> {
                     .into_iter()
                     .map(|arg| self.map_expr(arg))
                     .collect::<Vec<_>>();
-                let _top = self.globals.get(&name).expect("that proc wasn't found");
+                let Some(_top) = self.globals.get(&name) else {
+                    panic!("that proc ({name}) wasn't found")
+                };
                 Expr::ProcCall { name, args }
             }
         }
@@ -244,14 +246,23 @@ impl<'a> State<'a> {
                 body,
             } => {
                 let (body, args) = self.introduce_new_bindings_in(args, |this| this.map_expr(body));
-
-                Top::Procedure {
+                let top = Top::Procedure {
                     name,
                     args: args.collect(),
                     return_type,
                     body,
-                }
+                };
+                self.globals.insert(name, top.clone());
+                top
             }
         }
+    }
+
+    pub fn ensure_main_exists(&self) {
+        assert!(self.bindings.len() == 0);
+        assert!(self.captures.is_empty());
+        let Some(_) = self.globals.get(&level0::GlobalSymbol(Ident("main"))) else {
+            panic!("main wasn't found")
+        };
     }
 }

@@ -63,7 +63,7 @@ impl std::fmt::Display for Top<'_> {
                         write!(f, ", ")?;
                     }
                 }
-                write!(f, ") -> {return_type}: {{\n{body}\n}}")
+                write!(f, ") -> {return_type} {{\n{body:indent$}\n}}", indent = 4)
             }
         }
     }
@@ -91,6 +91,8 @@ pub enum Expr<'a> {
 
 impl std::fmt::Display for Expr<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let indent = f.width().unwrap_or(0);
+        write!(f, "{:indent$}", "")?;
         match self {
             Expr::Number(n) => write!(f, "{n}"),
             Expr::LambdaFunction { arg, body } => write!(f, "{arg} -> {body}"),
@@ -98,7 +100,7 @@ impl std::fmt::Display for Expr<'_> {
                 name,
                 value,
                 body: scope,
-            } => write!(f, "let {name} = {value} in\n{scope}"),
+            } => write!(f, "let {name} = {value} in\n{scope:indent$}",),
             Expr::BinaryOperation(lhs, kind, rhs) => write!(f, "({lhs}{kind}{rhs})"),
             Expr::Referal(name) => write!(f, "{name}"),
             Expr::ProcCall { name, args } => {
