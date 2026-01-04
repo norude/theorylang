@@ -29,7 +29,7 @@ fn report_err(path: &str, text: &str, err: &chumsky::prelude::Rich<'_, char>) {
     .unwrap();
 }
 
-fn main() -> rustyline::Result<()> {
+fn main() {
     let args = get_args();
     if let Some(path) = args.file {
         let text = std::fs::read_to_string(Path::new(&path)).unwrap();
@@ -38,29 +38,30 @@ fn main() -> rustyline::Result<()> {
                 report_err(&path, &text, &err);
             }
         }) else {
-            return Ok(());
+            return;
         };
         println!("{tree}");
         let lowered = tree.lower_all_the_way();
         lowered.eval();
-        return Ok(());
+        return;
     }
-    let mut rl = rustyline::DefaultEditor::new()?;
-    loop {
-        let Ok(line) = rl.readline(">> ") else {
-            return Ok(());
-        };
-        rl.add_history_entry(&line)?;
-
-        let Ok(tree) = parser().parse(&line).into_result().map_err(|errs| {
-            for err in errs {
-                report_err("stdin", &line, &err);
-            }
-        }) else {
-            continue;
-        };
-
-        let lowered = tree.lower_all_the_way();
-        lowered.eval();
-    }
+    unimplemented!("the REPL is not implemented yet")
+    // let mut rl = rustyline::DefaultEditor::new()?;
+    // loop {
+    //     let Ok(line) = rl.readline(">> ") else {
+    //         return Ok(());
+    //     };
+    //     rl.add_history_entry(&line)?;
+    //
+    //     let Ok(tree) = parser().parse(&line).into_result().map_err(|errs| {
+    //         for err in errs {
+    //             report_err("stdin", &line, &err);
+    //         }
+    //     }) else {
+    //         continue;
+    //     };
+    //
+    //     let lowered = tree.lower_all_the_way();
+    //     lowered.eval();
+    // }
 }
